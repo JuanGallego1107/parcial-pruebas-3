@@ -1,0 +1,81 @@
+name: Run Laravel Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  laravel-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Paso 1: Checkout del repositorio
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Paso 2: Configurar PHP
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.2
+          extensions: mbstring, pdo, ctype, json, tokenizer, xml
+          ini-values: post_max_size=256M, max_execution_time=300
+
+      # Paso 3: Instalar dependencias con Composer
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-progress --no-suggest
+
+      # Paso 4: Configurar archivo .env
+      - name: Create .env file
+        run: |
+          cp .env.example .env
+          echo "DB_CONNECTION=mysql" >> .env
+          echo "DB_HOST=db" >> .env
+          echo "DB_PORT=3306" >> .env
+          echo "DB_DATABASE=docker_app" >> .env
+          echo "DB_USERNAME=gallego" >> .env
+          echo "DB_PASSWORD=admin123" >> .env
+          echo "CACHE_DRIVER=redis" >> .env
+          echo "SESSION_DRIVER=redis" >> .env
+          echo "QUEUE_CONNECTION=redis" >> .env
+          echo "REDIS_HOST=redis" >> .env
+          echo "REDIS_PORT=6379" >> .env
+
+      # Paso 5: Generar clave de aplicación
+      - name: Generate application key
+        run: php artisan key:generate
+
+      # Paso 6: Configurar Docker Compose
+      - name: Set up Docker Compose
+        run: |
+          docker compose up -d --build
+
+      # Paso 7: Ejecutar migraciones
+      - name: Run migrations
+        run: |
+          docker compose exec web php artisan migrate --force
+
+      # Paso 8: Ejecutar seeders
+      - name: Run seeders
+        run: |
+          docker compose exec web php artisan db:seed --force
+      
+      # Paso 9: Ejecutar pruebas de integración
+      - name: Run unit tests
+        run: |
+          docker compose exec web php artisan test --testsuite=Unit
+
+      # Paso 10: Ejecutar pruebas de integración
+      - name: Run system tests
+        run: |
+          docker compose exec web php artisan test --testsuite=Feature
+
+      # Paso 11: Simular despliegue
+      - name: Simulate Deployment
+        if: ${{ success() }}
+        run: |
+          echo "Deployment simulated: All tests passed!"
